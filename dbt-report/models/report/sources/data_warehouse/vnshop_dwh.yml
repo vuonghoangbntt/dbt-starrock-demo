@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: vnshop_datawarehouse
+    database: warehouse
+    tables:
+    - name: dim_warehouse_v2
+    - name: dim_shop_v2
+    - name: dim_product_v2
+    - name: fact_order_completed_v2
+    - name: fact_order_created_v2

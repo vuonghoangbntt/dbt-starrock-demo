@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: vnshop_datawarehouse
-    database: warehouse
+    schema: warehouse.vnshop_datawarehouse
     tables:
     - name: dim_warehouse_v2
     - name: dim_shop_v2

@@ -2,6 +2,7 @@
 
 export DBT_STARROCKS_HOST=starrocks-fe-service.starrocks.svc
 export DBT_STARROCKS_PORT=9030
+export DBT_TARGET=prod
 
 echo "Please enter your username:"
 read -r email

@@ -1,0 +1,18 @@
+starrocks:
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
+  outputs:
+    dev:
+      type: starrocks
+      host: localhost
+      port: 9030
+      schema: "{{ env_var('SCHEMA', 'phongvu_datawarehouse') }}"
+      username: "{{ env_var('USERNAME', 'root') }}"
+      password: "{{ env_var('PASSWORD', 'password') }}"
+    prod:
+      type: starrocks
+      host: "{{ env_var('DBT_STARROCKS_HOST', 'starrocks-fe-service.starrocks.svc') }}"
+      port: "{{ env_var('DBT_STARROCKS_PORT', '9030') }}"
+      schema: "{{ env_var('SCHEMA', 'phongvu_datawarehouse') }}"
+      username: "{{ env_var('USERNAME', 'trino') }}"
+      password: "{{ env_var('PASSWORD', 'password') }}"
+

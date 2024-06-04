@@ -1,0 +1,9 @@
+target/
+dbt_packages/
+logs/
+.vscode/
+hack/
+.ipynb_checkpoints
+local/
+.idea/
+datasets/

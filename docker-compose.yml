@@ -1,0 +1,191 @@
+# Use postgres/example user/password credentials
+version: '3.9'
+
+networks:
+  dbt-starrock-network:
+    name: dbt-starrock
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.18.0.0/16
+          gateway: 172.18.0.1
+
+volumes:
+  postgres-data:
+    name: postgres-data
+    driver: local
+  minio-data:
+    name: minio-data
+    driver: local
+  starrock-postgres-data:
+    name: trino-postgres-data
+    driver: local
+  delta-postgres-data:
+    name: delta-postgres-data
+    driver: local
+  hive-data:
+    name: hive-data
+    driver: local
+  delta-hive-data:
+    name: hive-data
+    driver: local
+  starrock-be-data:
+    name: starrock-data
+    driver: local
+  starrock-fe-data:
+    name: starrock-fe
+    driver: local
+services:
+  starrocks-fe:
+    image: starrocks/fe-ubuntu:3.2-latest
+    hostname: starrocks-fe
+    user: root
+    command: |
+      sh /opt/starrocks/fe/bin/start_fe.sh
+    networks:
+      dbt-starrock-network:
+        ipv4_address: 172.18.0.3
+    # ports:
+    #   - 8030:8030
+    #   - 9020:9020
+    #   - 9030:9030
+    volumes:
+      - starrock-fe-data:/opt/starrocks/fe/meta
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_REGION=us-east-1
+    healthcheck:
+      test: 'mysql -u root -h starrocks-fe -P 9030 -e "SHOW FRONTENDS\G" |grep "Alive: true"'
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  starrocks-be:
+    image: starrocks/be-ubuntu:3.2-latest
+    command:
+      - /bin/bash
+      - -c
+      - |
+        ulimit -u 65535;
+        ulimit -n 65535;
+        echo "# Enable data cache"  >> /opt/starrocks/be/conf/be.conf
+        echo "block_cache_enable = true"  >> /opt/starrocks/be/conf/be.conf
+        echo "block_cache_mem_size = 536870912" >> /opt/starrocks/be/conf/be.conf
+        echo "block_cache_disk_size = 1073741824" >> /opt/starrocks/be/conf/be.conf
+        sleep 15s
+        mysql --connect-timeout 2 -h starrocks-fe -P 9030 -u root -e "ALTER SYSTEM ADD BACKEND \"starrocks-be:9050\";"
+        /opt/starrocks/be/bin/start_be.sh
+    # ports:
+    #   - 8040:8040
+    networks:
+      dbt-starrock-network:
+        ipv4_address: 172.18.0.4
+    volumes:
+      - starrock-be-data:/opt/starrocks/be/storage
+    hostname: starrocks-be
+    user: root
+    depends_on:
+      - starrocks-fe
+    healthcheck:
+      test: 'mysql -u root -h starrocks-fe -P 9030 -e "SHOW BACKENDS\G" |grep "Alive: true"'
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  minio:
+    image: bitnami/minio:2023.7.18
+    container_name: minio
+    restart: on-failure
+    networks:
+      dbt-starrock-network:
+        ipv4_address: 172.18.0.5
+    hostname: minio
+    environment:
+      MINIO_ROOT_USER: username
+      MINIO_ROOT_PASSWORD: password
+      MINIO_DEFAULT_BUCKETS: data/warehouse
+    volumes:
+      - minio-data:/data
+  
+  metastore:
+    # image: apache/hive:4.0.0-alpha-2 caused engine not found when create table using hive metastore
+    image: apache/hive:3.1.3
+    container_name: metastore
+    restart: on-failure
+    networks:
+      dbt-starrock-network:
+        ipv4_address: 172.18.0.2
+    hostname: metastore
+    environment:
+      DB_DRIVER: postgres
+      SERVICE_NAME: metastore
+      HADOOP_CLASSPATH: /opt/hadoop/share/hadoop/tools/lib/hadoop-aws-3.1.0.jar:/opt/hadoop/share/hadoop/tools/lib/aws-java-sdk-bundle-1.11.271.jar
+      IS_RESUME: true
+    volumes:
+      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml
+      - hive-data:/opt/hive/data/warehouse
+    depends_on: [ postgres, minio]
+  
+  # delta-metastore:
+  #   image: apache/hive:3.1.3
+  #   container_name: delta-hive-metastore
+  #   restart: on-failure
+  #   networks:
+  #     mage-trino-network:
+  #       ipv4_address: 172.18.0.8
+  #   hostname: delta-metastore
+  #   environment:
+  #     DB_DRIVER: postgres
+  #     SERVICE_NAME: metastore
+  #     HADOOP_CLASSPATH: /opt/hadoop/share/hadoop/tools/lib/hadoop-aws-3.1.0.jar:/opt/hadoop/share/hadoop/tools/lib/aws-java-sdk-bundle-1.11.271.jar
+  #     IS_RESUME: true
+  #   volumes:
+  #     - ./hive/conf/delta-hive-site.xml:/opt/hive/conf/hive-site.xml
+  #     - delta-hive-data:/opt/hive/data/warehouse
+  #   depends_on: [ delta-postgres, minio]
+  
+  postgres:
+    image: postgres:13.8-alpine
+    container_name: postgres
+    restart: on-failure
+    networks:
+      dbt-starrock-network:
+        ipv4_address: 172.18.0.6
+    hostname: postgres
+    environment:
+      POSTGRES_USER: username
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: metastore
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+  
+  starrock-postgres:
+    image: postgres:13.8-alpine
+    container_name: starrock-postgres
+    restart: on-failure
+    networks:
+      dbt-starrock-network:
+        ipv4_address: 172.18.0.7
+    hostname: trino-postgres
+    environment:
+      POSTGRES_USER: username
+      POSTGRES_PASSWORD: password
+    volumes:
+      - starrock-postgres-data:/var/lib/postgresql/data
+  
+  # delta-postgres:
+  #   image: postgres:13.8-alpine
+  #   container_name: delta-postgres
+  #   restart: on-failure
+  #   networks:
+  #     mage-trino-network:
+  #       ipv4_address: 172.18.0.9
+  #   hostname: delta-postgres
+  #   environment:
+  #     POSTGRES_USER: username
+  #     POSTGRES_PASSWORD: password
+  #     POSTGRES_DB: metastore
+  #   volumes:
+  #     - delta-postgres-data:/var/lib/postgresql/data

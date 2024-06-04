@@ -1,0 +1,33 @@
+name: 'dbt_report'
+version: '1.1.0'
+config-version: 2
+
+profile: "starrocks"
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+dispatch:
+  - macro_namespace: dbt_utils
+    search_order: ['dbt_report', 'dbt_utils']
+
+seeds:
+  +database: starrocks
+
+# Configuring models
+# Full documentation: https://docs.getdbt.com/docs/configuring-models
+models:
+  dbt_report:
+    report:
+      bi_phongvu:
+        +materialized: table
+        +tags: bi_phongvu
+        +database: default_catalog
